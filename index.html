@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>니케 리세계 한방 분석기</title>
+    <style>
+        body { font-family: sans-serif; background: #1a1a1a; color: white; text-align: center; padding: 20px; }
+        .step { background: #2a2a2a; padding: 20px; margin-bottom: 20px; border-radius: 10px; border: 2px solid #444; }
+        #status { font-size: 1.5em; color: #007bff; margin: 10px; font-weight: bold; }
+        #result-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+        .char-card { border: 2px solid #444; padding: 10px; width: 90px; opacity: 0.3; background: #222; transition: 0.3s; }
+        .char-card.found { opacity: 1; border-color: #00ff00; background: #1e3a1e; box-shadow: 0 0 15px #00ff00; transform: scale(1.05); }
+        img { width: 70px; height: 70px; border-radius: 5px; object-fit: cover; }
+        .rate { font-size: 10px; color: #ffcc00; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <h1>NIKKE 매물표 한방 분석기 🔍</h1>
+    <div id="status">상태: 라이브러리 로드 중...</div>
+
+    <div class="step">
+        <p>리세계 사이트의 <b>커다란 통스샷</b>을 복사(Ctrl+C)하고 여기서 <b>Ctrl + V</b> 하세요.</p>
+        <p style="font-size: 0.8em; color: #888;">(서버비 걱정 없는 완전 무료 도구입니다)</p>
+    </div>
+
+    <div id="result-container"></div>
+
+    <script async src="https://docs.opencv.org/4.5.2/opencv.js" onload="onCvReady()"></script>
+
+    <script>
+        // 형님이 알려주신 캐릭터 리스트
+        const charList = [
+            { id: 'cinderella', name: '신데렐라' }, { id: 'crown', name: '크라운' },
+            { id: 'grave', name: '그레이브' }, { id: 'haran', name: '하란' },
+            { id: 'liberallio', name: '리버렐리오' }, { id: 'modernia', name: '모더니아' },
+            { id: 'nayuta', name: '나유타' }, { id: 'noah', name: '노아' },
+            { id: 'siren', name: '세이렌' }, { id: 'snowwhite_h', name: '스노우 화이트' }
+        ];
+
+        let templates = {};
+        let isCvReady = false;
+
+        // 1. 페이지가 열리면 사진들을 미리 읽어옴
+        async function onCvReady() {
+            document.getElementById('status').innerText = '상태: 캐릭터 데이터 로딩 중...';
+            renderInitialList();
+            
+            for (const char of charList) {
+                try {
+                    // 깃허브 icons 폴더 안의 사진을 읽어옵니다.
+                    const img = await loadImg(`./icons/${char.id}.png`); 
+                    templates[char.id] = cv.imread(img);
+                } catch (e) { 
+                    console.log(char.id + " 사진을 찾을 수 없습니다."); 
+                }
+            }
