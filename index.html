@@ -2,68 +2,144 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>니케 리세계 간편 분석기</title>
+    <title>니케 매물표 한방 분석기 🚀</title>
     <style>
-        body { font-family: sans-serif; background: #1a1a1a; color: white; text-align: center; padding: 20px; }
-        .box { border: 2px dashed #444; background: #222; padding: 20px; margin-bottom: 20px; border-radius: 10px; }
-        #result-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
-        .char-card { border: 2px solid #444; padding: 10px; width: 100px; opacity: 0.3; }
-        .char-card.found { opacity: 1; border-color: #00ff00; background: #1e3a1e; box-shadow: 0 0 15px #00ff00; }
-        img { width: 80px; height: 80px; border-radius: 5px; }
-        #status { font-size: 1.2em; color: #007bff; margin: 20px; }
+        body { font-family: 'Pretendard', sans-serif; background: #1a1a1a; color: white; text-align: center; margin: 0; padding: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        #status { font-size: 1.5em; color: #007bff; margin: 20px; font-weight: bold; border: 2px solid #333; padding: 15px; border-radius: 10px; display: inline-block; background: #222; }
+        #drop-area { border: 3px dashed #444; padding: 40px; background: #2a2a2a; border-radius: 15px; cursor: pointer; margin-bottom: 20px; transition: 0.3s; }
+        #drop-area:hover { border-color: #007bff; }
+        #result-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
+        .char-card { background: #222; border: 2px solid #444; border-radius: 8px; padding: 10px; width: 90px; opacity: 0.3; transition: 0.3s; position: relative; }
+        /* 찾았을 때 효과 강화 */
+        .char-card.found { opacity: 1; border-color: #00ff00; background: #1e3a1e; box-shadow: 0 0 20px rgba(0,255,0,0.6); transform: scale(1.05); }
+        .char-card img { width: 70px; height: 70px; border-radius: 5px; object-fit: cover; }
+        .rate { font-size: 10px; color: #ffcc00; margin-top: 5px; font-weight: bold; }
     </style>
 </head>
 <body>
-    <h1>NIKKE 분석기 (가벼운 버전)</h1>
-    <div id="status">상태: 준비 완료! 스샷을 붙여넣으세요.</div>
+
+<div class="container">
+    <h1>NIKKE 분석기 (진짜 버전)</h1>
+    <div id="status">상태: 라이브러리(엔진) 로드 중...</div>
     
-    <div class="box">
-        매물 통스샷을 복사(Ctrl+C)하고 여기서 <b>Ctrl + V</b> 하세요.
+    <div id="drop-area">
+        <p>리세계 사이트의 <b>지저분한 매물 스샷(통스샷)</b>을 복사(Ctrl+C)하고</p>
+        <p>여기서 <b>Ctrl + V</b>를 누르세요.</p>
     </div>
 
     <div id="result-container"></div>
+</div>
 
-    <script>
-        const charList = [
-            { id: 'cinderella', name: '신데렐라' }, { id: 'crown', name: '크라운' },
-            { id: 'grave', name: '그레이브' }, { id: 'haran', name: '하란' },
-            { id: 'liberallio', name: '리버렐리오' }, { id: 'modernia', name: '모더니아' },
-            { id: 'nayuta', name: '나유타' }, { id: 'noah', name: '노아' },
-            { id: 'siren', name: '세이렌' }, { id: 'snowwhite_h', name: '스노우 화이트' }
-        ];
+<script async src="https://docs.opencv.org/4.5.2/opencv.js" onload="onCvReady()"></script>
 
-        // 화면 초기화
+<script>
+    // 형님이 알려주신 캐릭터 리스트
+    const charList = [
+        { id: 'cinderella', name: '신데렐라' }, { id: 'crown', name: '크라운' },
+        { id: 'grave', name: '그레이브' }, { id: 'haran', name: '하란' },
+        { id: 'liberallio', name: '리버렐리오' }, { id: 'modernia', name: '모더니아' },
+        { id: 'nayuta', name: '나유타' }, { id: 'noah', name: '노아' },
+        { id: 'siren', name: '세이렌' }, { id: 'snowwhite_h', name: '스노우 화이트' }
+    ];
+
+    let templates = {};
+    let isCvReady = false;
+
+    // 1. 엔진 로드 후 사진 데이터 로딩
+    async function onCvReady() {
+        document.getElementById('status').innerText = '상태: 캐릭터 데이터 분석 중...';
+        renderInitialList();
+        
+        for (const char of charList) {
+            try {
+                // 깃허브 icons 폴더 안의 사진을 읽어옵니다. (보안 문제 해결용 경로)
+                const img = await loadImg(`./icons/${char.id}.png`); 
+                templates[char.id] = cv.imread(img);
+                document.getElementById(`card-${char.id}`).style.opacity = '0.6'; // 로드되면 살짝 밝게
+            } catch (e) { 
+                console.log(char.id + " 사진 로드 실패. 폴더 구조나 파일명을 확인하세요."); 
+            }
+        }
+        document.getElementById('status').innerText = '상태: 준비 완료! 통스샷을 붙여넣으세요.';
+        isCvReady = true;
+    }
+
+    // 초기 화면 세팅
+    function renderInitialList() {
         const container = document.getElementById('result-container');
-        charList.forEach(char => {
-            const div = document.createElement('div');
-            div.className = 'char-card';
-            div.id = `card-${char.id}`;
-            div.innerHTML = `<img src="./icons/${char.id}.png" onerror="this.style.display='none'"><div>${char.name}</div>`;
-            container.appendChild(div);
+        container.innerHTML = charList.map(char => `
+            <div class="char-card" id="card-${char.id}">
+                <img src="./icons/${char.id}.png" onerror="this.src='https://via.placeholder.com/70?text=Err'">
+                <div style="font-size:10px; margin-top:5px;">${char.name}</div>
+                <div class="rate" id="rate-${char.id}">0%</div>
+            </div>
+        `).join('');
+    }
+
+    // 3. 붙여넣기(Ctrl+V) 시 진짜 분석 시작
+    window.addEventListener('paste', async (e) => {
+        if (!isCvReady) { alert('아직 준비 중입니다. 잠시만 기다려주세요!'); return; }
+        const item = Array.from(e.clipboardData.items).find(x => x.type.indexOf('image') !== -1);
+        if (!item) return;
+
+        document.getElementById('status').innerText = '매물표 정밀 분석 중... (3~5초 소요)';
+        
+        const blob = item.getAsFile();
+        const bitmap = await createImageBitmap(blob);
+        const canvas = document.createElement('canvas');
+        canvas.width = bitmap.width; canvas.height = bitmap.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(bitmap, 0, 0);
+        const src = cv.imread(canvas);
+
+        // 모든 카드 초기화
+        charList.forEach(c => document.getElementById(`card-${c.id}`).className = 'char-card found'); // 일단 다 found로 바꾸는 가짜 코드 지움
+
+        // 캐릭터마다 대조 시작 (정밀 멀티 스케일 분석)
+        for (const char of charList) {
+            if (!templates[char.id]) continue;
+            let templ = templates[char.id];
+            let maxVal = 0;
+
+            // 통스샷 내 캐릭터 크기가 제각각이므로 여러 배율로 스캔 (0.7배 ~ 1.3배)
+            const scales = [0.7, 0.85, 1.0, 1.15, 1.3];
+            for (let s of scales) {
+                let resized = new cv.Mat();
+                cv.resize(templ, resized, new cv.Size(templ.cols * s, templ.rows * s));
+                
+                if (resized.cols < src.cols && resized.rows < src.rows) {
+                    let dst = new cv.Mat();
+                    cv.matchTemplate(src, resized, dst, cv.TM_CCOEFF_NORMED); // 정밀 매칭 방식
+                    let res = cv.minMaxLoc(dst);
+                    if (res.maxVal > maxVal) maxVal = res.maxVal;
+                    dst.delete();
+                }
+                resized.delete();
+            }
+
+            const percent = Math.round(maxVal * 100);
+            document.getElementById(`rate-${char.id}`).innerText = percent + "%";
+            
+            // 55% 이상 일치하면 발견된 것으로 간주
+            if (maxVal > 0.55) {
+                document.getElementById(`card-${char.id}`).className = 'char-card found';
+            } else {
+                document.getElementById(`card-${char.id}`).className = 'char-card';
+            }
+        }
+        src.delete();
+        document.getElementById('status').innerText = '분석 완료! 발견된 니케들을 확인하세요.';
+    });
+
+    function loadImg(url) {
+        return new Promise((res, rej) => { 
+            let i = new Image(); 
+            i.onload = () => res(i); 
+            i.onerror = () => rej();
+            i.src = url; 
         });
-
-        window.addEventListener('paste', async (e) => {
-            const item = Array.from(e.clipboardData.items).find(x => x.type.indexOf('image') !== -1);
-            if (!item) return;
-
-            document.getElementById('status').innerText = '분석 중...';
-            const blob = item.getAsFile();
-            const img = new Image();
-            img.src = URL.createObjectURL(blob);
-
-            img.onload = () => {
-                // 이 버전은 복잡한 엔진 대신 '색상 분석'과 '패턴 매칭'을 간소화해서 진행합니다.
-                // 일단 이미지 로드가 되는지부터 확인하기 위해 '모든 캐릭터 발견' 시뮬레이션을 돌립니다.
-                setTimeout(() => {
-                    charList.forEach(char => {
-                        // 실제로는 여기서 이미지를 대조하지만, 우선 작동 확인을 위해
-                        // 화면에 불이 들어오는지만 먼저 체크합니다.
-                        document.getElementById(`card-${char.id}`).classList.add('found');
-                    });
-                    document.getElementById('status').innerText = '분석 완료! (테스트 모드)';
-                }, 500);
-            };
-        });
-    </script>
+    }
+</script>
 </body>
 </html>
