@@ -8,7 +8,7 @@
         .step { background: #2a2a2a; padding: 20px; margin-bottom: 20px; border-radius: 10px; border: 2px solid #444; }
         #status { font-size: 1.5em; color: #007bff; margin: 10px; font-weight: bold; }
         #result-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
-        .char-card { border: 2px solid #444; padding: 10px; width: 90px; opacity: 0.3; background: #222; transition: 0.3s; }
+        .char-card { border: 2px solid #444; padding: 10px; width: 90px; opacity: 0.3; background: #222; }
         .char-card.found { opacity: 1; border-color: #00ff00; background: #1e3a1e; box-shadow: 0 0 15px #00ff00; transform: scale(1.05); }
         img { width: 70px; height: 70px; border-radius: 5px; object-fit: cover; }
         .rate { font-size: 10px; color: #ffcc00; margin-top: 5px; }
@@ -16,19 +16,17 @@
 </head>
 <body>
     <h1>NIKKE 매물표 한방 분석기 🔍</h1>
-    <div id="status">상태: 라이브러리 로드 중...</div>
+    <div id="status">상태: 엔진(OpenCV) 로드 중... (잠시만 기다려주세요)</div>
 
     <div class="step">
-        <p>리세계 사이트의 <b>커다란 통스샷</b>을 복사(Ctrl+C)하고 여기서 <b>Ctrl + V</b> 하세요.</p>
-        <p style="font-size: 0.8em; color: #888;">(서버비 걱정 없는 완전 무료 도구입니다)</p>
+        <p>매물 통스샷을 복사(Ctrl+C)하고 여기서 <b>Ctrl + V</b> 하세요.</p>
     </div>
 
     <div id="result-container"></div>
 
-    <script async src="https://docs.opencv.org/4.5.2/opencv.js" onload="onCvReady()"></script>
+    <script async src="https://cdn.jsdelivr.net/npm/@techstardev/opencv-js@4.7.0-dev.20221121/opencv.js" onload="onCvReady()"></script>
 
     <script>
-        // 형님이 알려주신 캐릭터 리스트
         const charList = [
             { id: 'cinderella', name: '신데렐라' }, { id: 'crown', name: '크라운' },
             { id: 'grave', name: '그레이브' }, { id: 'haran', name: '하란' },
@@ -40,17 +38,82 @@
         let templates = {};
         let isCvReady = false;
 
-        // 1. 페이지가 열리면 사진들을 미리 읽어옴
         async function onCvReady() {
-            document.getElementById('status').innerText = '상태: 캐릭터 데이터 로딩 중...';
+            document.getElementById('status').innerText = '상태: 이미지 데이터 분석 중...';
             renderInitialList();
             
             for (const char of charList) {
                 try {
-                    // 깃허브 icons 폴더 안의 사진을 읽어옵니다.
+                    // 깃허브 경로 보안 문제를 해결하기 위한 절대 경로 처리
                     const img = await loadImg(`./icons/${char.id}.png`); 
                     templates[char.id] = cv.imread(img);
                 } catch (e) { 
-                    console.log(char.id + " 사진을 찾을 수 없습니다."); 
+                    console.log(char.id + " 로드 실패"); 
                 }
             }
+            document.getElementById('status').innerText = '상태: 준비 완료! 스샷을 붙여넣으세요.';
+            isCvReady = true;
+        }
+
+        function renderInitialList() {
+            const container = document.getElementById('result-container');
+            container.innerHTML = charList.map(char => `
+                <div class="char-card" id="card-${char.id}">
+                    <img src="./icons/${char.id}.png" onerror="this.style.opacity='0.2'">
+                    <div style="font-size:10px; margin-top:5px;">${char.name}</div>
+                    <div class="rate" id="rate-${char.id}">0%</div>
+                </div>
+            `).join('');
+        }
+
+        window.addEventListener('paste', async (e) => {
+            if (!isCvReady) return;
+            const item = Array.from(e.clipboardData.items).find(x => x.type.indexOf('image') !== -1);
+            if (!item) return;
+
+            document.getElementById('status').innerText = '매물표 정밀 분석 중...';
+            const blob = item.getAsFile();
+            const bitmap = await createImageBitmap(blob);
+            const canvas = document.createElement('canvas');
+            canvas.width = bitmap.width; canvas.height = bitmap.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(bitmap, 0, 0);
+            const src = cv.imread(canvas);
+
+            for (const char of charList) {
+                if (!templates[char.id]) continue;
+                let templ = templates[char.id];
+                let maxVal = 0;
+
+                // 스케일 보정 (0.6배 ~ 1.4배까지 더 넓게 검색)
+                for (let s of [0.6, 0.8, 1.0, 1.2, 1.4]) {
+                    let resized = new cv.Mat();
+                    cv.resize(templ, resized, new cv.Size(templ.cols * s, templ.rows * s));
+                    if (resized.cols < src.cols && resized.rows < src.rows) {
+                        let dst = new cv.Mat();
+                        cv.matchTemplate(src, resized, dst, cv.TM_CCOEFF_NORMED);
+                        let res = cv.minMaxLoc(dst);
+                        if (res.maxVal > maxVal) maxVal = res.maxVal;
+                        dst.delete();
+                    }
+                    resized.delete();
+                }
+
+                document.getElementById(`rate-${char.id}`).innerText = Math.round(maxVal * 100) + "%";
+                if (maxVal > 0.5) document.getElementById(`card-${char.id}`).className = 'char-card found';
+            }
+            src.delete();
+            document.getElementById('status').innerText = '분석 완료!';
+        });
+
+        function loadImg(url) {
+            return new Promise((res, rej) => { 
+                let i = new Image(); 
+                i.onload = () => res(i); 
+                i.onerror = () => rej();
+                i.src = url; 
+            });
+        }
+    </script>
+</body>
+</html>
